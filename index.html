@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>M3E Podcast Player</title>
-    <!-- Web App Manifest for PWA installation (You can link your own manifest.json here) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
@@ -18,7 +17,7 @@
             --md-sys-color-primary: #9CD67D; 
             --md-sys-color-on-primary: #0C3900;
             --md-sys-color-primary-container: #265108;
-            --md-sys-color-secondary-container: #3B4A34; /* Opacity accent */
+            --md-sys-color-secondary-container: #3B4A34; 
             --md-sys-color-error: #FFB4AB; 
             --md-sys-color-error-container: #93000A;
             --md-sys-color-outline: #8C9388;
@@ -48,6 +47,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 20px var(--spacing) 10px var(--spacing);
+            padding-top: calc(20px + env(safe-area-inset-top, 0px));
             gap: 12px;
         }
         .app-title { font-size: 24px; font-weight: 700; color: var(--md-sys-color-primary); margin: 0; }
@@ -126,7 +126,9 @@
 
         /* === BOTTOM BAR === */
         #bottom-bar {
-            position: fixed; bottom: var(--spacing); left: var(--spacing); right: var(--spacing);
+            position: fixed; 
+            bottom: calc(var(--spacing) + env(safe-area-inset-bottom, 0px)); 
+            left: var(--spacing); right: var(--spacing);
             display: flex; gap: 8px; height: 56px; z-index: 10;
         }
         .btn { border: none; border-radius: 100px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -138,7 +140,9 @@
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background-color: var(--md-sys-color-surface);
             z-index: 50; display: flex; flex-direction: column;
-            padding: var(--spacing); padding-top: 40px;
+            padding: var(--spacing); 
+            padding-top: calc(40px + env(safe-area-inset-top, 0px));
+            padding-bottom: calc(var(--spacing) + env(safe-area-inset-bottom, 0px));
             transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
         }
         #view-player.active { transform: translateY(0); }
@@ -196,14 +200,25 @@
 
         /* === MINI PLAYER (BUBBLE MODE) === */
         #mini-player {
-            position: fixed; bottom: 80px; left: var(--spacing); right: var(--spacing);
+            position: fixed; 
+            bottom: calc(80px + env(safe-area-inset-bottom, 0px)); 
+            left: var(--spacing); right: var(--spacing);
             background: var(--md-sys-color-secondary-container);
             border-radius: var(--radius-medium); padding: 12px 16px;
             display: flex; align-items: center; gap: 12px; z-index: 40;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer;
-            transform: translateY(150%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+            
+            /* Start completely hidden and unclickable */
+            transform: translateY(20px); 
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.3s ease, opacity 0.3s ease;
         }
-        #mini-player.active { transform: translateY(0); }
+        #mini-player.active { 
+            transform: translateY(0); 
+            opacity: 1;
+            pointer-events: auto;
+        }
         .mini-title { flex: 1; color: var(--md-sys-color-on-surface); font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .mini-btn { background: transparent; border: none; color: var(--md-sys-color-primary); font-size: 20px; cursor: pointer; }
 
@@ -214,6 +229,8 @@
             z-index: 100; display: flex; flex-direction: column;
             transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
             padding: var(--spacing);
+            padding-top: calc(var(--spacing) + env(safe-area-inset-top, 0px));
+            padding-bottom: calc(var(--spacing) + env(safe-area-inset-bottom, 0px));
         }
         .modal.active { transform: translateY(0); }
         
@@ -292,10 +309,8 @@
         <div class="media-container">
             <div class="media-fallback">🎧</div>
             <img id="media-cover" class="media-cover" style="display: none;" src="">
-            <!-- Video element supports both Audio & Video natively[span_7](start_span)[span_7](end_span) -->
             <video id="display-video" class="media-video" playsinline></video>
             
-            <!-- Tap Zones for skipping[span_8](start_span)[span_8](end_span) -->
             <div class="tap-zones">
                 <div class="tap-left" id="tap-left-zone"></div>
                 <div class="tap-right" id="tap-right-zone"></div>
@@ -451,7 +466,7 @@
 
     // --- XML PARSING AND ITUNES RESOLUTION ---
     async function resolveiTunesUrl(targetUrl) {
-        if (targetUrl.includes("podcasts.apple.com")) {[span_9](start_span)[span_9](end_span)
+        if (targetUrl.includes("podcasts.apple.com")) {
             const idMatch = targetUrl.match(/\/id(\d+)/);
             if (idMatch) {
                 try {
@@ -459,7 +474,7 @@
                     const res = await fetch(apiObj);
                     const data = await res.json();
                     if (data.results && data.results.length > 0) {
-                        return data.results[0].feedUrl;[span_10](start_span)[span_10](end_span)
+                        return data.results[0].feedUrl;
                     }
                 } catch(e) { console.error("iTunes lookup failed", e); }
             }
@@ -476,9 +491,9 @@
         const fetchId = ++currentFetchId;
 
         try {
-            const targetUrl = await resolveiTunesUrl(initialUrl);[span_11](start_span)[span_11](end_span)
-            const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';[span_12](start_span)[span_12](end_span)
-            const apiUrl = `${proxyUrl}/?url=${encodeURIComponent(targetUrl)}`;[span_13](start_span)[span_13](end_span)
+            const targetUrl = await resolveiTunesUrl(initialUrl);
+            const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';
+            const apiUrl = `${proxyUrl}/?url=${encodeURIComponent(targetUrl)}`;
             
             const res = await fetch(apiUrl);
             if (!res.ok) throw new Error("Network response was not ok");
@@ -492,28 +507,28 @@
             let channelImageUrl = "";
             const imageTag = xmlDoc.querySelector("channel > image > url, channel > itunes\\:image, itunes\\:image");
             if (imageTag) {
-                channelImageUrl = imageTag.textContent || imageTag.getAttribute("href") || "";[span_14](start_span)[span_14](end_span)
+                channelImageUrl = imageTag.textContent || imageTag.getAttribute("href") || "";
             }
 
             const items = xmlDoc.querySelectorAll("item");
             if (items.length > 0) {
                 const episodes = [];
                 items.forEach(item => {
-                    let epTitle = item.querySelector("title")?.textContent || "No Title";[span_15](start_span)[span_15](end_span)
-                    let epUrl = item.querySelector("enclosure")?.getAttribute("url") || "";[span_16](start_span)[span_16](end_span)
-                    let epDesc = item.querySelector("description, content\\:encoded")?.textContent || "No description provided.";[span_17](start_span)[span_17](end_span)
+                    let epTitle = item.querySelector("title")?.textContent || "No Title";
+                    let epUrl = item.querySelector("enclosure")?.getAttribute("url") || "";
+                    let epDesc = item.querySelector("description, content\\:encoded")?.textContent || "No description provided.";
                     
                     if (epTitle && epUrl) {
-                        episodes.push({ title: epTitle, url: epUrl, desc: epDesc });[span_18](start_span)[span_18](end_span)
+                        episodes.push({ title: epTitle, url: epUrl, desc: epDesc });
                     }
                 });
                 renderEpisodes(episodes, channelImageUrl, channelName);
             } else {
-                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">No episodes found.</div>`;[span_19](start_span)[span_19](end_span)
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">No episodes found.</div>`;
             }
         } catch(e) {
             if (fetchId === currentFetchId) {
-                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">Failed to load feed.</div>`;[span_20](start_span)[span_20](end_span)
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">Failed to load feed.</div>`;
             }
         }
     }
@@ -522,67 +537,67 @@
         episodeList.innerHTML = '';
         
         episodes.forEach(ep => {
-            const row = document.createElement('div');[span_21](start_span)[span_21](end_span)
+            const row = document.createElement('div');
             row.className = 'episode-row';
             
-            const playBtn = document.createElement('button');[span_22](start_span)[span_22](end_span)
+            const playBtn = document.createElement('button');
             playBtn.className = 'episode-play-btn';
-            playBtn.innerText = `🎧 ${ep.title}`;[span_23](start_span)[span_23](end_span)
+            playBtn.innerText = `🎧 ${ep.title}`;
             
             playBtn.onclick = () => {
                 startPlayback(ep, finalImageUrl, channelName);
             };
 
-            const dlBtn = document.createElement('button');[span_24](start_span)[span_24](end_span)
+            const dlBtn = document.createElement('button');
             dlBtn.className = 'episode-dl-btn';
-            dlBtn.innerText = '⬇️';[span_25](start_span)[span_25](end_span)
+            dlBtn.innerText = '⬇️';
             
             dlBtn.onclick = () => {
                 downloadEpisode(ep.url, ep.title, channelName);
             };
 
-            row.appendChild(playBtn);[span_26](start_span)[span_26](end_span)
-            row.appendChild(dlBtn);[span_27](start_span)[span_27](end_span)
+            row.appendChild(playBtn);
+            row.appendChild(dlBtn);
             episodeList.appendChild(row);
         });
     }
 
     // --- PLAYER & MEDIA LOGIC ---
-    function formatTime(seconds) {[span_28](start_span)[span_28](end_span)
+    function formatTime(seconds) {
         seconds = Math.floor(seconds);
         const sec = seconds % 60;
         const min = Math.floor((seconds / 60)) % 60;
         const hr = Math.floor(seconds / 3600);
         const secStr = sec < 10 ? "0" + sec : sec;
         const minStr = min < 10 ? "0" + min : min;
-        return hr > 0 ? `${hr}:${minStr}:${secStr}` : `${minStr}:${secStr}`;[span_29](start_span)[span_29](end_span)
+        return hr > 0 ? `${hr}:${minStr}:${secStr}` : `${minStr}:${secStr}`;
     }
 
     function startPlayback(episode, imageUrl, channelName) {
-        displayVideo.pause();[span_30](start_span)[span_30](end_span)
+        displayVideo.pause();
         
         // Reset UI
-        descScroll.innerHTML = episode.desc;[span_31](start_span)[span_31](end_span)
+        descScroll.innerHTML = episode.desc;
         descScroll.scrollTop = 0;
-        descScroll.style.display = 'none';[span_32](start_span)[span_32](end_span)
-        descToggle.innerText = "Read Description ▼";[span_33](start_span)[span_33](end_span)
+        descScroll.style.display = 'none';
+        descToggle.innerText = "Read Description ▼";
         
         if (imageUrl) {
             mediaCover.src = imageUrl;
-            mediaCover.style.display = 'block';[span_34](start_span)[span_34](end_span)
+            mediaCover.style.display = 'block';
             displayVideo.style.opacity = '0'; // Hide video element for pure audio
         } else {
-            mediaCover.style.display = 'none';[span_35](start_span)[span_35](end_span)
+            mediaCover.style.display = 'none';
             displayVideo.style.opacity = '1';
         }
 
-        timeCurrent.innerText = "00:00";[span_36](start_span)[span_36](end_span)
-        timeTotal.innerText = "00:00";[span_37](start_span)[span_37](end_span)
-        mediaSeek.value = 0;[span_38](start_span)[span_38](end_span)
+        timeCurrent.innerText = "00:00";
+        timeTotal.innerText = "00:00";
+        mediaSeek.value = 0;
         
-        displayVideo.src = episode.url;[span_39](start_span)[span_39](end_span)
+        displayVideo.src = episode.url;
         displayVideo.load();
-        displayVideo.play().catch(e => console.error("Playback failed", e));[span_40](start_span)[span_40](end_span)
+        displayVideo.play().catch(e => console.error("Playback failed", e));
         
         miniTitle.innerText = episode.title;
         miniPlayer.classList.add('active');
@@ -593,45 +608,45 @@
 
     // Media Event Listeners
     displayVideo.addEventListener('loadedmetadata', () => {
-        mediaSeek.max = displayVideo.duration;[span_41](start_span)[span_41](end_span)
-        timeTotal.innerText = formatTime(displayVideo.duration);[span_42](start_span)[span_42](end_span)
+        mediaSeek.max = displayVideo.duration;
+        timeTotal.innerText = formatTime(displayVideo.duration);
     });
 
     displayVideo.addEventListener('timeupdate', () => {
         if (!mediaSeek.matches(':active')) {
-            mediaSeek.value = displayVideo.currentTime;[span_43](start_span)[span_43](end_span)
+            mediaSeek.value = displayVideo.currentTime;
         }
-        timeCurrent.innerText = formatTime(displayVideo.currentTime);[span_44](start_span)[span_44](end_span)
+        timeCurrent.innerText = formatTime(displayVideo.currentTime);
     });
 
     displayVideo.addEventListener('play', () => miniPlayBtn.innerText = '⏸');
     displayVideo.addEventListener('pause', () => miniPlayBtn.innerText = '▶');
 
     mediaSeek.addEventListener('input', () => {
-        displayVideo.currentTime = mediaSeek.value;[span_45](start_span)[span_45](end_span)
-        timeCurrent.innerText = formatTime(mediaSeek.value);[span_46](start_span)[span_46](end_span)
+        displayVideo.currentTime = mediaSeek.value;
+        timeCurrent.innerText = formatTime(mediaSeek.value);
     });
 
     // Tap to skip logic (Left/Right zones)
     function handleTap(isLeft) {
         const now = Date.now();
-        if (now - lastTapTime < 300) {[span_47](start_span)[span_47](end_span)
+        if (now - lastTapTime < 300) {
             // Double Tap
-            clearTimeout(singleTapTimeout);[span_48](start_span)[span_48](end_span)
-            const skipAmount = 15;[span_49](start_span)[span_49](end_span)
+            clearTimeout(singleTapTimeout);
+            const skipAmount = 15;
             if (isLeft) {
-                displayVideo.currentTime = Math.max(0, displayVideo.currentTime - skipAmount);[span_50](start_span)[span_50](end_span)
+                displayVideo.currentTime = Math.max(0, displayVideo.currentTime - skipAmount);
             } else {
-                displayVideo.currentTime = Math.min(displayVideo.duration, displayVideo.currentTime + skipAmount);[span_51](start_span)[span_51](end_span)
+                displayVideo.currentTime = Math.min(displayVideo.duration, displayVideo.currentTime + skipAmount);
             }
-            lastTapTime = 0;[span_52](start_span)[span_52](end_span)
+            lastTapTime = 0;
         } else {
             // Single Tap
-            lastTapTime = now;[span_53](start_span)[span_53](end_span)
-            singleTapTimeout = setTimeout(() => {[span_54](start_span)[span_54](end_span)
-                if (displayVideo.paused) displayVideo.play();[span_55](start_span)[span_55](end_span)
-                else displayVideo.pause();[span_56](start_span)[span_56](end_span)
-            }, 300);[span_57](start_span)[span_57](end_span)
+            lastTapTime = now;
+            singleTapTimeout = setTimeout(() => {
+                if (displayVideo.paused) displayVideo.play();
+                else displayVideo.pause();
+            }, 300);
         }
     }
     document.getElementById('tap-left-zone').addEventListener('touchstart', (e) => { e.preventDefault(); handleTap(true); });
@@ -641,36 +656,36 @@
 
     // Player Buttons
     function toggleMute() {
-        isMuted = !isMuted;[span_58](start_span)[span_58](end_span)
-        displayVideo.muted = isMuted;[span_59](start_span)[span_59](end_span)
-        muteBtn.innerText = isMuted ? "🔇" : "🔊";[span_60](start_span)[span_60](end_span)
+        isMuted = !isMuted;
+        displayVideo.muted = isMuted;
+        muteBtn.innerText = isMuted ? "🔇" : "🔊";
     }
 
     function toggleSleepTimer() {
-        if (sleepTimerMins === 0) sleepTimerMins = 15;[span_61](start_span)[span_61](end_span)
-        else if (sleepTimerMins === 15) sleepTimerMins = 30;[span_62](start_span)[span_62](end_span)
-        else if (sleepTimerMins === 30) sleepTimerMins = 60;[span_63](start_span)[span_63](end_span)
-        else sleepTimerMins = 0;[span_64](start_span)[span_64](end_span)
+        if (sleepTimerMins === 0) sleepTimerMins = 15;
+        else if (sleepTimerMins === 15) sleepTimerMins = 30;
+        else if (sleepTimerMins === 30) sleepTimerMins = 60;
+        else sleepTimerMins = 0;
 
         if (sleepInterval) clearInterval(sleepInterval);
 
-        if (sleepTimerMins === 0) {[span_65](start_span)[span_65](end_span)
-            sleepTargetTime = 0;[span_66](start_span)[span_66](end_span)
-            sleepStatus.innerText = "⌛Off";[span_67](start_span)[span_67](end_span)
-            sleepStatus.style.color = "var(--md-sys-color-on-surface)";[span_68](start_span)[span_68](end_span)
+        if (sleepTimerMins === 0) {
+            sleepTargetTime = 0;
+            sleepStatus.innerText = "⌛Off";
+            sleepStatus.style.color = "var(--md-sys-color-on-surface)";
         } else {
-            sleepTargetTime = Date.now() + (sleepTimerMins * 60000);[span_69](start_span)[span_69](end_span)
-            sleepStatus.innerText = `⌛${sleepTimerMins}m`;[span_70](start_span)[span_70](end_span)
-            sleepStatus.style.color = "var(--md-sys-color-primary)";[span_71](start_span)[span_71](end_span)
+            sleepTargetTime = Date.now() + (sleepTimerMins * 60000);
+            sleepStatus.innerText = `⌛${sleepTimerMins}m`;
+            sleepStatus.style.color = "var(--md-sys-color-primary)";
             
             sleepInterval = setInterval(() => {
-                if (Date.now() >= sleepTargetTime) {[span_72](start_span)[span_72](end_span)
-                    displayVideo.pause();[span_73](start_span)[span_73](end_span)
+                if (Date.now() >= sleepTargetTime) {
+                    displayVideo.pause();
                     clearInterval(sleepInterval);
-                    sleepTimerMins = 0;[span_74](start_span)[span_74](end_span)
-                    sleepStatus.innerText = "⌛Off";[span_75](start_span)[span_75](end_span)
-                    sleepStatus.style.color = "var(--md-sys-color-on-surface)";[span_76](start_span)[span_76](end_span)
-                    alert("Sleep Timer finished.");[span_77](start_span)[span_77](end_span)
+                    sleepTimerMins = 0;
+                    sleepStatus.innerText = "⌛Off";
+                    sleepStatus.style.color = "var(--md-sys-color-on-surface)";
+                    alert("Sleep Timer finished.");
                 }
             }, 1000);
         }
@@ -678,11 +693,11 @@
 
     function toggleDescription() {
         if (descScroll.style.display === 'none' || descScroll.style.display === '') {
-            descScroll.style.display = 'block';[span_78](start_span)[span_78](end_span)
-            descToggle.innerText = "Hide Description ▲";[span_79](start_span)[span_79](end_span)
+            descScroll.style.display = 'block';
+            descToggle.innerText = "Hide Description ▲";
         } else {
-            descScroll.style.display = 'none';[span_80](start_span)[span_80](end_span)
-            descToggle.innerText = "Read Description ▼";[span_81](start_span)[span_81](end_span)
+            descScroll.style.display = 'none';
+            descToggle.innerText = "Read Description ▼";
         }
     }
 
@@ -701,7 +716,7 @@
     }
 
     function closePlayer() {
-        displayVideo.pause();[span_82](start_span)[span_82](end_span)
+        displayVideo.pause();
         displayVideo.src = "";
         playerView.classList.remove('active');
         miniPlayer.classList.remove('active');
@@ -709,16 +724,14 @@
 
     // --- DOWNLOAD MANAGER ---
     function downloadEpisode(url, title, channelName) {
-        // Strip non-standard characters[span_83](start_span)[span_83](end_span)
-        const safeTitle = title.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();[span_84](start_span)[span_84](end_span)
-        const safeChannel = channelName.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();[span_85](start_span)[span_85](end_span)
-        const filename = `${safeChannel} - ${safeTitle}.mp3`;[span_86](start_span)[span_86](end_span)
+        const safeTitle = title.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();
+        const safeChannel = channelName.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();
+        const filename = `${safeChannel} - ${safeTitle}.mp3`;
         
-        // Creating an anchor tag to trigger browser download
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
-        a.target = '_blank'; // Fallback if browser forces a new tab for cross-origin media
+        a.target = '_blank';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -730,34 +743,34 @@
     function escapeHtml(text) { return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 
     // --- BACKUP & SYNC ---
-    function exportData() {[span_87](start_span)[span_87](end_span)
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(channels));[span_88](start_span)[span_88](end_span)
-        const downloadNode = document.createElement('a');[span_89](start_span)[span_89](end_span)
-        downloadNode.setAttribute("href", dataStr);[span_90](start_span)[span_90](end_span)
-        downloadNode.setAttribute("download", "podcasts_backup.json");[span_91](start_span)[span_91](end_span)
-        document.body.appendChild(downloadNode);[span_92](start_span)[span_92](end_span)
-        downloadNode.click();[span_93](start_span)[span_93](end_span)
-        downloadNode.remove();[span_94](start_span)[span_94](end_span)
+    function exportData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(channels));
+        const downloadNode = document.createElement('a');
+        downloadNode.setAttribute("href", dataStr);
+        downloadNode.setAttribute("download", "podcasts_backup.json");
+        document.body.appendChild(downloadNode);
+        downloadNode.click();
+        downloadNode.remove();
     }
 
-    function importData(event) {[span_95](start_span)[span_95](end_span)
-        const file = event.target.files[0];[span_96](start_span)[span_96](end_span)
-        if (!file) return;[span_97](start_span)[span_97](end_span)
-        const reader = new FileReader();[span_98](start_span)[span_98](end_span)
-        reader.onload = function(e) {[span_99](start_span)[span_99](end_span)
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
             try {
-                const imported = JSON.parse(e.target.result);[span_100](start_span)[span_100](end_span)
-                if(Array.isArray(imported)) {[span_101](start_span)[span_101](end_span)
-                    channels = imported;[span_102](start_span)[span_102](end_span)
-                    saveToStorage();[span_103](start_span)[span_103](end_span)
-                    renderChannels();[span_104](start_span)[span_104](end_span)
-                    closeModal('settings-modal');[span_105](start_span)[span_105](end_span)
-                    alert("Podcasts imported successfully!");[span_106](start_span)[span_106](end_span)
+                const imported = JSON.parse(e.target.result);
+                if(Array.isArray(imported)) {
+                    channels = imported;
+                    saveToStorage();
+                    renderChannels();
+                    closeModal('settings-modal');
+                    alert("Podcasts imported successfully!");
                 }
-            } catch (err) { alert("Invalid backup file."); }[span_107](start_span)[span_107](end_span)
+            } catch (err) { alert("Invalid backup file."); }
         };
-        reader.readAsText(file);[span_108](start_span)[span_108](end_span)
-        event.target.value = '';[span_109](start_span)[span_109](end_span)
+        reader.readAsText(file);
+        event.target.value = '';
     }
 
     // Boot
