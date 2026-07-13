@@ -207,8 +207,6 @@
             border-radius: var(--radius-medium); padding: 12px 16px;
             display: flex; align-items: center; gap: 12px; z-index: 40;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer;
-            
-            /* Start completely hidden and unclickable */
             transform: translateY(20px); 
             opacity: 0;
             pointer-events: none;
@@ -470,9 +468,12 @@
             const idMatch = targetUrl.match(/\/id(\d+)/);
             if (idMatch) {
                 try {
+                    // Update: Route iTunes lookup through your Cloudflare proxy to avoid ad-block/CORS blocks
                     const apiObj = `https://itunes.apple.com/lookup?id=${idMatch[1]}`;
-                    const res = await fetch(apiObj);
+                    const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';
+                    const res = await fetch(`${proxyUrl}/?url=${encodeURIComponent(apiObj)}`);
                     const data = await res.json();
+                    
                     if (data.results && data.results.length > 0) {
                         return data.results[0].feedUrl;
                     }
@@ -499,6 +500,12 @@
             if (!res.ok) throw new Error("Network response was not ok");
             const xmlText = await res.text();
             
+            // Check if the user pasted an HTML website link instead of an RSS feed
+            if (xmlText.trim().toLowerCase().startsWith("<!doctype html>") || xmlText.includes("<html")) {
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">This is a website link, not an RSS feed. Please provide a valid RSS or Apple Podcasts URL.</div>`;
+                return;
+            }
+
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(xmlText, "text/xml");
             
@@ -510,13 +517,21 @@
                 channelImageUrl = imageTag.textContent || imageTag.getAttribute("href") || "";
             }
 
-            const items = xmlDoc.querySelectorAll("item");
+            const items = xmlDoc.querySelectorAll("item, entry");
             if (items.length > 0) {
                 const episodes = [];
                 items.forEach(item => {
                     let epTitle = item.querySelector("title")?.textContent || "No Title";
-                    let epUrl = item.querySelector("enclosure")?.getAttribute("url") || "";
-                    let epDesc = item.querySelector("description, content\\:encoded")?.textContent || "No description provided.";
+                    
+                    // Support both RSS and Atom enclosures
+                    let epUrl = item.querySelector("enclosure")?.getAttribute("url") || item.querySelector("link[rel='enclosure']")?.getAttribute("href") || "";
+                    
+                    // UPDATE: Force HTTPS to prevent 'Mixed Content' blocks on GitHub Pages
+                    if (epUrl.startsWith("http://")) {
+                        epUrl = epUrl.replace("http://", "https://");
+                    }
+
+                    let epDesc = item.querySelector("description, content\\:encoded, summary")?.textContent || "No description provided.";
                     
                     if (epTitle && epUrl) {
                         episodes.push({ title: epTitle, url: epUrl, desc: epDesc });
@@ -528,7 +543,7 @@
             }
         } catch(e) {
             if (fetchId === currentFetchId) {
-                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">Failed to load feed.</div>`;
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">Failed to load feed. Ensure the URL is valid.</div>`;
             }
         }
     }
@@ -597,7 +612,11 @@
         
         displayVideo.src = episode.url;
         displayVideo.load();
-        displayVideo.play().catch(e => console.error("Playback failed", e));
+        
+        displayVideo.play().catch(e => {
+            console.error("Playback failed", e);
+            alert("Unable to play media. The podcast host may be blocking direct access.");
+        });
         
         miniTitle.innerText = episode.title;
         miniPlayer.classList.add('active');
@@ -724,17 +743,17 @@
 
     // --- DOWNLOAD MANAGER ---
     function downloadEpisode(url, title, channelName) {
-        const safeTitle = title.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();
-        const safeChannel = channelName.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();
-        const filename = `${safeChannel} - ${safeTitle}.mp3`;
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // UPDATE: Web Apps cannot silently force cross-origin downloads like native apps can.
+        // The safest workaround is to open the direct MP3 link in a new tab for the user to save.
+        if (confirm("Because this is a Web App, the audio file will open securely in a new tab. You can save it to your device from there. Proceed?")) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
     }
 
     // --- UTILS & MODALS ---
