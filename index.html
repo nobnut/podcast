@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- Hides your GitHub domain from strict podcast hosts to prevent hotlink blocking -->
+    <meta name="referrer" content="no-referrer">
+    
     <title>M3E Podcast Player</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -207,6 +211,7 @@
             border-radius: var(--radius-medium); padding: 12px 16px;
             display: flex; align-items: center; gap: 12px; z-index: 40;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer;
+            
             transform: translateY(20px); 
             opacity: 0;
             pointer-events: none;
@@ -468,7 +473,6 @@
             const idMatch = targetUrl.match(/\/id(\d+)/);
             if (idMatch) {
                 try {
-                    // Update: Route iTunes lookup through your Cloudflare proxy to avoid ad-block/CORS blocks
                     const apiObj = `https://itunes.apple.com/lookup?id=${idMatch[1]}`;
                     const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';
                     const res = await fetch(`${proxyUrl}/?url=${encodeURIComponent(apiObj)}`);
@@ -500,7 +504,6 @@
             if (!res.ok) throw new Error("Network response was not ok");
             const xmlText = await res.text();
             
-            // Check if the user pasted an HTML website link instead of an RSS feed
             if (xmlText.trim().toLowerCase().startsWith("<!doctype html>") || xmlText.includes("<html")) {
                 episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">This is a website link, not an RSS feed. Please provide a valid RSS or Apple Podcasts URL.</div>`;
                 return;
@@ -523,10 +526,8 @@
                 items.forEach(item => {
                     let epTitle = item.querySelector("title")?.textContent || "No Title";
                     
-                    // Support both RSS and Atom enclosures
                     let epUrl = item.querySelector("enclosure")?.getAttribute("url") || item.querySelector("link[rel='enclosure']")?.getAttribute("href") || "";
                     
-                    // UPDATE: Force HTTPS to prevent 'Mixed Content' blocks on GitHub Pages
                     if (epUrl.startsWith("http://")) {
                         epUrl = epUrl.replace("http://", "https://");
                     }
@@ -579,6 +580,7 @@
 
     // --- PLAYER & MEDIA LOGIC ---
     function formatTime(seconds) {
+        if (!seconds || isNaN(seconds)) return "00:00";
         seconds = Math.floor(seconds);
         const sec = seconds % 60;
         const min = Math.floor((seconds / 60)) % 60;
@@ -600,7 +602,7 @@
         if (imageUrl) {
             mediaCover.src = imageUrl;
             mediaCover.style.display = 'block';
-            displayVideo.style.opacity = '0'; // Hide video element for pure audio
+            displayVideo.style.opacity = '0'; 
         } else {
             mediaCover.style.display = 'none';
             displayVideo.style.opacity = '1';
@@ -611,11 +613,27 @@
         mediaSeek.value = 0;
         
         displayVideo.src = episode.url;
+
+        // --- SMART PROXY FALLBACK FOR MEDIA BLOCKING ---
+        // If the server strictly blocks the media, the <video> element will throw an error.
+        displayVideo.onerror = () => {
+            if (!displayVideo.src.includes('rss-proxy')) {
+                console.log("Direct playback blocked. Falling back to proxy stream...");
+                displayVideo.src = `https://rss-proxy.slaterjohn2.workers.dev/?url=${encodeURIComponent(episode.url)}`;
+                displayVideo.load();
+                displayVideo.play().catch(e => {
+                    console.error("Proxy playback failed", e);
+                });
+            } else {
+                alert("Unable to play media. The podcast host may be strictly blocking access.");
+            }
+        };
+        
         displayVideo.load();
         
+        // Attempt initial play
         displayVideo.play().catch(e => {
-            console.error("Playback failed", e);
-            alert("Unable to play media. The podcast host may be blocking direct access.");
+            console.error("Initial playback promise rejected", e);
         });
         
         miniTitle.innerText = episode.title;
@@ -646,11 +664,10 @@
         timeCurrent.innerText = formatTime(mediaSeek.value);
     });
 
-    // Tap to skip logic (Left/Right zones)
+    // Tap to skip logic
     function handleTap(isLeft) {
         const now = Date.now();
         if (now - lastTapTime < 300) {
-            // Double Tap
             clearTimeout(singleTapTimeout);
             const skipAmount = 15;
             if (isLeft) {
@@ -660,7 +677,6 @@
             }
             lastTapTime = 0;
         } else {
-            // Single Tap
             lastTapTime = now;
             singleTapTimeout = setTimeout(() => {
                 if (displayVideo.paused) displayVideo.play();
@@ -673,7 +689,6 @@
     document.getElementById('tap-left-zone').addEventListener('mousedown', () => handleTap(true));
     document.getElementById('tap-right-zone').addEventListener('mousedown', () => handleTap(false));
 
-    // Player Buttons
     function toggleMute() {
         isMuted = !isMuted;
         displayVideo.muted = isMuted;
@@ -720,14 +735,8 @@
         }
     }
 
-    function shrinkPlayer() {
-        playerView.classList.remove('active');
-    }
-
-    function expandPlayer() {
-        playerView.classList.add('active');
-    }
-
+    function shrinkPlayer() { playerView.classList.remove('active'); }
+    function expandPlayer() { playerView.classList.add('active'); }
     function toggleMiniPlay(event) {
         event.stopPropagation();
         if (displayVideo.paused) displayVideo.play();
@@ -743,11 +752,16 @@
 
     // --- DOWNLOAD MANAGER ---
     function downloadEpisode(url, title, channelName) {
-        // UPDATE: Web Apps cannot silently force cross-origin downloads like native apps can.
-        // The safest workaround is to open the direct MP3 link in a new tab for the user to save.
         if (confirm("Because this is a Web App, the audio file will open securely in a new tab. You can save it to your device from there. Proceed?")) {
+            let finalUrl = url;
+            
+            // Route BBC downloads strictly through the proxy to bypass access blocks
+            if (url.includes("bbc.co.uk") || url.includes("bbci.co.uk")) {
+                finalUrl = `https://rss-proxy.slaterjohn2.workers.dev/?url=${encodeURIComponent(url)}`;
+            }
+
             const a = document.createElement('a');
-            a.href = url;
+            a.href = finalUrl;
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
             document.body.appendChild(a);
@@ -792,7 +806,6 @@
         event.target.value = '';
     }
 
-    // Boot
     init();
 
 </script>
