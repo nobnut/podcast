@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>M3E Podcast Player</title>
+    <!-- Web App Manifest for PWA installation (You can link your own manifest.json here) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        /* === MATERIAL 3 EXPRESSIVE DARK THEME === */
+        :root {
+            --md-sys-color-background: #1A1C19;
+            --md-sys-color-on-background: #E2E3DD;
+            --md-sys-color-surface: #2A2C29; 
+            --md-sys-color-on-surface: #E2E3DD;
+            --md-sys-color-on-surface-variant: #C2C9BD; 
+            --md-sys-color-primary: #9CD67D; 
+            --md-sys-color-on-primary: #0C3900;
+            --md-sys-color-primary-container: #265108;
+            --md-sys-color-secondary-container: #3B4A34; /* Opacity accent */
+            --md-sys-color-error: #FFB4AB; 
+            --md-sys-color-error-container: #93000A;
+            --md-sys-color-outline: #8C9388;
+            --md-sys-color-surface-container-highest: #333532;
+            
+            --radius-large: 24px;
+            --radius-medium: 16px;
+            --spacing: 12px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--md-sys-color-background);
+            color: var(--md-sys-color-on-background);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* === HEADERS === */
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px var(--spacing) 10px var(--spacing);
+            gap: 12px;
+        }
+        .app-title { font-size: 24px; font-weight: 700; color: var(--md-sys-color-primary); margin: 0; }
+        
+        .header-title {
+            flex: 1;
+            text-align: left;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--md-sys-color-on-surface);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin: 0;
+        }
+        
+        .header-btn {
+            background: transparent; border: none; color: var(--md-sys-color-primary);
+            font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            padding: 8px 12px;
+        }
+
+        /* === MAIN VIEWS === */
+        .view-container {
+            flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 var(--spacing);
+            transition: opacity 0.3s;
+        }
+        .hidden { display: none !important; }
+
+        .scroll-area {
+            flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--spacing);
+        }
+        .scroll-area::after {
+            content: "";
+            min-height: 140px;
+            flex-shrink: 0;
+        }
+
+        /* === CHANNEL CARDS === */
+        .feed-btn {
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            border: none; border-radius: var(--radius-medium);
+            padding: 16px; font-size: 16px; font-weight: 600;
+            display: flex; align-items: center; gap: 12px;
+            cursor: pointer; text-align: left;
+            transition: transform 0.2s, background-color 0.2s;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        .feed-btn:active { transform: scale(0.98); background-color: var(--md-sys-color-surface-container-highest); }
+        .feed-icon { font-size: 20px; pointer-events: none; }
+        .feed-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;}
+        .feed-delete { 
+            color: var(--md-sys-color-error); background: transparent; border: none; 
+            font-size: 18px; padding: 4px 8px; cursor: pointer;
+        }
+
+        /* === EPISODE ROWS === */
+        .episode-row {
+            display: flex; align-items: center; gap: 8px;
+            background-color: var(--md-sys-color-surface);
+            border-radius: var(--radius-medium);
+            padding: 8px 12px; flex-shrink: 0;
+        }
+        .episode-play-btn {
+            flex: 1; text-align: left; background: transparent; border: none;
+            color: var(--md-sys-color-on-surface); font-size: 15px; font-weight: 500;
+            padding: 8px 0; cursor: pointer; 
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .episode-dl-btn {
+            background: transparent; border: none; color: var(--md-sys-color-on-surface);
+            font-size: 20px; padding: 8px; cursor: pointer; flex-shrink: 0;
+        }
+
+        /* === BOTTOM BAR === */
+        #bottom-bar {
+            position: fixed; bottom: var(--spacing); left: var(--spacing); right: var(--spacing);
+            display: flex; gap: 8px; height: 56px; z-index: 10;
+        }
+        .btn { border: none; border-radius: 100px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-primary { background-color: var(--md-sys-color-primary-container); color: var(--md-sys-color-primary); flex: 1;}
+        .btn-icon { background-color: var(--md-sys-color-primary-container); color: var(--md-sys-color-primary); flex: 0 0 56px; font-size: 20px;}
+
+        /* === PLAYER VIEW === */
+        #view-player {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--md-sys-color-surface);
+            z-index: 50; display: flex; flex-direction: column;
+            padding: var(--spacing); padding-top: 40px;
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+        }
+        #view-player.active { transform: translateY(0); }
+
+        .player-header {
+            display: flex; align-items: center; gap: 8px; padding-bottom: 16px;
+        }
+        .player-status { flex: 1; font-size: 14px; color: var(--md-sys-color-on-surface); }
+        .player-btn-small {
+            background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-surface);
+            border: none; border-radius: 50px; width: 38px; height: 38px; font-size: 14px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .player-btn-close {
+            background: var(--md-sys-color-error); color: var(--md-sys-color-on-background);
+            border: none; border-radius: 50px; width: 38px; height: 38px; font-size: 14px; cursor: pointer;
+        }
+
+        .media-container {
+            width: 100%; aspect-ratio: 1 / 1; max-height: 350px;
+            background-color: #1C1B1F; border-radius: var(--radius-medium);
+            margin: 0 auto; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center;
+        }
+        .media-video { width: 100%; height: 100%; object-fit: contain; position: absolute; top:0; left:0; z-index: 2; }
+        .media-cover { width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0; z-index: 1; }
+        .media-fallback { font-size: 64px; position: absolute; z-index: 0; }
+        .tap-zones {
+            position: absolute; top:0; left:0; width: 100%; height: 100%; z-index: 5; display: flex;
+        }
+        .tap-left, .tap-right { flex: 1; height: 100%; }
+
+        .scrubber-container {
+            display: flex; align-items: center; gap: 12px; margin-top: 24px; padding: 0 8px;
+        }
+        .time-text { font-size: 12px; color: var(--md-sys-color-on-surface); width: 45px; text-align: center; }
+        .seek-bar {
+            flex: 1; -webkit-appearance: none; background: transparent; height: 24px;
+        }
+        .seek-bar::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; background: var(--md-sys-color-outline); border-radius: 2px;
+        }
+        .seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%;
+            background: var(--md-sys-color-primary); margin-top: -6px; cursor: pointer;
+        }
+
+        .desc-toggle {
+            text-align: center; color: var(--md-sys-color-primary); font-size: 14px;
+            margin-top: 24px; cursor: pointer; font-weight: bold;
+        }
+        .desc-scroll {
+            flex: 1; overflow-y: auto; margin-top: 12px; font-size: 14px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant);
+            display: none; padding: 8px;
+        }
+
+        /* === MINI PLAYER (BUBBLE MODE) === */
+        #mini-player {
+            position: fixed; bottom: 80px; left: var(--spacing); right: var(--spacing);
+            background: var(--md-sys-color-secondary-container);
+            border-radius: var(--radius-medium); padding: 12px 16px;
+            display: flex; align-items: center; gap: 12px; z-index: 40;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer;
+            transform: translateY(150%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+        }
+        #mini-player.active { transform: translateY(0); }
+        .mini-title { flex: 1; color: var(--md-sys-color-on-surface); font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mini-btn { background: transparent; border: none; color: var(--md-sys-color-primary); font-size: 20px; cursor: pointer; }
+
+        /* === MODALS === */
+        .modal {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--md-sys-color-background);
+            z-index: 100; display: flex; flex-direction: column;
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+            padding: var(--spacing);
+        }
+        .modal.active { transform: translateY(0); }
+        
+        .modal-content {
+            background-color: var(--md-sys-color-surface);
+            border-radius: var(--radius-large); flex: 1; display: flex; flex-direction: column;
+            padding: 20px; border: 1px solid var(--md-sys-color-outline);
+        }
+
+        .modal-header { font-size: 22px; font-weight: bold; margin-bottom: 24px; color: var(--md-sys-color-primary); }
+        .editor-input { 
+            background: rgba(0,0,0,0.2); border: 1px solid var(--md-sys-color-outline); 
+            color: var(--md-sys-color-on-background); font-family: inherit; font-size: 16px;
+            padding: 16px; border-radius: 12px; margin-bottom: 16px; outline: none; width: 100%; 
+        }
+        .editor-input:focus { border-color: var(--md-sys-color-primary); }
+        
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: auto; }
+        .text-btn { background: none; border: none; font-weight: bold; font-size: 14px; text-transform: uppercase; cursor: pointer; padding: 8px 16px; }
+        .settings-btn { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-primary); border: none; padding: 16px; border-radius: var(--radius-medium); font-size: 16px; font-weight: bold; margin-bottom: 12px; cursor: pointer; }
+
+        .loading-text { text-align: center; color: var(--md-sys-color-primary); font-weight: bold; padding: 20px; }
+    </style>
+    <!-- Link to the manifest file -->
+<link rel="manifest" href="./manifest.json">
+
+<!-- Register the Service Worker -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(registration => {
+          console.log('Service Worker registered successfully');
+        })
+        .catch(error => {
+          console.log('Service Worker registration failed:', error);
+        });
+    });
+  }
+</script>
+
+</head>
+<body>
+
+    <!-- CHANNELS VIEW -->
+    <div id="view-channels" class="view-container">
+        <div class="app-header">
+            <h1 class="app-title">Podcast Channels</h1>
+        </div>
+        <div id="channel-list" class="scroll-area"></div>
+        <div id="bottom-bar">
+            <button class="btn btn-icon" onclick="openModal('settings-modal')">&#9881;&#65039;</button>
+            <button class="btn btn-primary" onclick="openModal('add-channel-modal')">+ Add Podcast</button>
+        </div>
+    </div>
+
+    <!-- EPISODES VIEW -->
+    <div id="view-episodes" class="view-container hidden">
+        <div class="app-header">
+            <button class="header-btn" onclick="backToChannels()">⬅️</button>
+            <h2 id="current-channel-name" class="header-title"></h2>
+        </div>
+        <div id="episode-list" class="scroll-area"></div>
+    </div>
+
+    <!-- MAIN PLAYER VIEW -->
+    <div id="view-player">
+        <div class="player-header">
+            <div id="sleep-status" class="player-status">⌛Off</div>
+            <button class="player-btn-small" onclick="toggleSleepTimer()">⌛</button>
+            <button class="player-btn-small" id="mute-btn" onclick="toggleMute()">🔊</button>
+            <button class="player-btn-small" onclick="shrinkPlayer()">━</button>
+            <button class="player-btn-close" onclick="closePlayer()">✖</button>
+        </div>
+
+        <div class="media-container">
+            <div class="media-fallback">🎧</div>
+            <img id="media-cover" class="media-cover" style="display: none;" src="">
+            <!-- Video element supports both Audio & Video natively[span_7](start_span)[span_7](end_span) -->
+            <video id="display-video" class="media-video" playsinline></video>
+            
+            <!-- Tap Zones for skipping[span_8](start_span)[span_8](end_span) -->
+            <div class="tap-zones">
+                <div class="tap-left" id="tap-left-zone"></div>
+                <div class="tap-right" id="tap-right-zone"></div>
+            </div>
+        </div>
+
+        <div class="scrubber-container">
+            <div id="time-current" class="time-text">00:00</div>
+            <input type="range" id="media-seek" class="seek-bar" value="0" step="0.1">
+            <div id="time-total" class="time-text">00:00</div>
+        </div>
+
+        <div id="desc-toggle" class="desc-toggle" onclick="toggleDescription()">Read Description ▼</div>
+        <div id="desc-scroll" class="desc-scroll"></div>
+    </div>
+
+    <!-- MINI PLAYER (BUBBLE) -->
+    <div id="mini-player" onclick="expandPlayer()">
+        <span style="font-size: 20px;">🎙️</span>
+        <div id="mini-title" class="mini-title">Podcast</div>
+        <button id="mini-play-btn" class="mini-btn" onclick="toggleMiniPlay(event)">⏸</button>
+    </div>
+
+    <!-- ADD CHANNEL MODAL -->
+    <div id="add-channel-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Add New Podcast</div>
+            <input type="text" id="channel-title-input" class="editor-input" placeholder="Channel Title">
+            <input type="url" id="channel-url-input" class="editor-input" placeholder="RSS or iTunes URL">
+            
+            <div class="modal-actions">
+                <button class="text-btn" style="color: var(--md-sys-color-error);" onclick="closeModal('add-channel-modal')">CANCEL</button>
+                <button class="text-btn" style="color: var(--md-sys-color-primary);" onclick="saveChannel()">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Settings & Data</div>
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                <p style="color: var(--md-sys-color-on-surface-variant); text-align: center; margin-bottom: 24px;">
+                    Export your podcasts list for backup or transfer.
+                </p>
+                <button class="settings-btn" onclick="exportData()">&#128228; Export Backup (JSON)</button>
+                <button class="settings-btn" onclick="document.getElementById('import-file').click()">&#128229; Import Backup</button>
+                <input type="file" id="import-file" style="display: none;" accept=".json" onchange="importData(event)">
+            </div>
+            <div class="modal-actions">
+                <button class="text-btn" style="color: var(--md-sys-color-error);" onclick="closeModal('settings-modal')">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- STATE MANAGEMENT ---
+    let channels = JSON.parse(localStorage.getItem('m3e_podcast_channels')) || [];
+    let currentFetchId = 0;
+    
+    // Player State
+    let isMuted = false;
+    let sleepTimerMins = 0;
+    let sleepTargetTime = 0;
+    let sleepInterval = null;
+    let lastTapTime = 0;
+    let singleTapTimeout = null;
+
+    // DOM Elements
+    const viewChannels = document.getElementById('view-channels');
+    const viewEpisodes = document.getElementById('view-episodes');
+    const channelList = document.getElementById('channel-list');
+    const episodeList = document.getElementById('episode-list');
+    
+    // Media Elements
+    const playerView = document.getElementById('view-player');
+    const displayVideo = document.getElementById('display-video');
+    const mediaCover = document.getElementById('media-cover');
+    const timeCurrent = document.getElementById('time-current');
+    const timeTotal = document.getElementById('time-total');
+    const mediaSeek = document.getElementById('media-seek');
+    const descToggle = document.getElementById('desc-toggle');
+    const descScroll = document.getElementById('desc-scroll');
+    const sleepStatus = document.getElementById('sleep-status');
+    const muteBtn = document.getElementById('mute-btn');
+    
+    // Mini Player Elements
+    const miniPlayer = document.getElementById('mini-player');
+    const miniTitle = document.getElementById('mini-title');
+    const miniPlayBtn = document.getElementById('mini-play-btn');
+
+    // --- INITIALIZATION ---
+    function init() {
+        if (channels.length === 0) {
+            channels.push({ id: Date.now(), title: "BBC Global News", url: "https://podcasts.files.bbci.co.uk/p02nq0gn.rss" });
+            saveToStorage();
+        }
+        renderChannels();
+    }
+
+    function saveToStorage() {
+        localStorage.setItem('m3e_podcast_channels', JSON.stringify(channels));
+    }
+
+    // --- NAVIGATION LOGIC ---
+    function backToChannels() {
+        viewEpisodes.classList.add('hidden');
+        viewChannels.classList.remove('hidden');
+    }
+
+    // --- CHANNELS RENDERING ---
+    function renderChannels() {
+        channelList.innerHTML = '';
+        channels.forEach((channel) => {
+            const btn = document.createElement('div');
+            btn.className = 'feed-btn';
+            btn.innerHTML = `
+                <span class="feed-icon">📻</span>
+                <span class="feed-title">${escapeHtml(channel.title)}</span>
+                <button class="feed-delete" onclick="deleteChannel(${channel.id}, event)">✖</button>
+            `;
+            btn.onclick = (e) => {
+                if(!e.target.classList.contains('feed-delete')) {
+                    fetchEpisodes(channel.url, channel.title);
+                }
+            };
+            channelList.appendChild(btn);
+        });
+    }
+
+    function saveChannel() {
+        const title = document.getElementById('channel-title-input').value.trim();
+        const url = document.getElementById('channel-url-input').value.trim();
+        if(!title || !url) { alert("Please enter both a title and a URL."); return; }
+        
+        channels.push({ id: Date.now(), title, url });
+        saveToStorage();
+        renderChannels();
+        
+        document.getElementById('channel-title-input').value = '';
+        document.getElementById('channel-url-input').value = '';
+        closeModal('add-channel-modal');
+    }
+
+    function deleteChannel(id, event) {
+        event.stopPropagation();
+        if(confirm("Delete this channel?")) {
+            channels = channels.filter(c => c.id !== id);
+            saveToStorage();
+            renderChannels();
+        }
+    }
+
+    // --- XML PARSING AND ITUNES RESOLUTION ---
+    async function resolveiTunesUrl(targetUrl) {
+        if (targetUrl.includes("podcasts.apple.com")) {[span_9](start_span)[span_9](end_span)
+            const idMatch = targetUrl.match(/\/id(\d+)/);
+            if (idMatch) {
+                try {
+                    const apiObj = `https://itunes.apple.com/lookup?id=${idMatch[1]}`;
+                    const res = await fetch(apiObj);
+                    const data = await res.json();
+                    if (data.results && data.results.length > 0) {
+                        return data.results[0].feedUrl;[span_10](start_span)[span_10](end_span)
+                    }
+                } catch(e) { console.error("iTunes lookup failed", e); }
+            }
+        }
+        return targetUrl;
+    }
+
+    async function fetchEpisodes(initialUrl, channelName) {
+        document.getElementById('current-channel-name').innerText = channelName;
+        viewChannels.classList.add('hidden');
+        viewEpisodes.classList.remove('hidden');
+        episodeList.innerHTML = '<div class="loading-text">Fetching episodes...</div>';
+        
+        const fetchId = ++currentFetchId;
+
+        try {
+            const targetUrl = await resolveiTunesUrl(initialUrl);[span_11](start_span)[span_11](end_span)
+            const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';[span_12](start_span)[span_12](end_span)
+            const apiUrl = `${proxyUrl}/?url=${encodeURIComponent(targetUrl)}`;[span_13](start_span)[span_13](end_span)
+            
+            const res = await fetch(apiUrl);
+            if (!res.ok) throw new Error("Network response was not ok");
+            const xmlText = await res.text();
+            
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            
+            if (fetchId !== currentFetchId) return;
+
+            let channelImageUrl = "";
+            const imageTag = xmlDoc.querySelector("channel > image > url, channel > itunes\\:image, itunes\\:image");
+            if (imageTag) {
+                channelImageUrl = imageTag.textContent || imageTag.getAttribute("href") || "";[span_14](start_span)[span_14](end_span)
+            }
+
+            const items = xmlDoc.querySelectorAll("item");
+            if (items.length > 0) {
+                const episodes = [];
+                items.forEach(item => {
+                    let epTitle = item.querySelector("title")?.textContent || "No Title";[span_15](start_span)[span_15](end_span)
+                    let epUrl = item.querySelector("enclosure")?.getAttribute("url") || "";[span_16](start_span)[span_16](end_span)
+                    let epDesc = item.querySelector("description, content\\:encoded")?.textContent || "No description provided.";[span_17](start_span)[span_17](end_span)
+                    
+                    if (epTitle && epUrl) {
+                        episodes.push({ title: epTitle, url: epUrl, desc: epDesc });[span_18](start_span)[span_18](end_span)
+                    }
+                });
+                renderEpisodes(episodes, channelImageUrl, channelName);
+            } else {
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">No episodes found.</div>`;[span_19](start_span)[span_19](end_span)
+            }
+        } catch(e) {
+            if (fetchId === currentFetchId) {
+                episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">Failed to load feed.</div>`;[span_20](start_span)[span_20](end_span)
+            }
+        }
+    }
+
+    function renderEpisodes(episodes, finalImageUrl, channelName) {
+        episodeList.innerHTML = '';
+        
+        episodes.forEach(ep => {
+            const row = document.createElement('div');[span_21](start_span)[span_21](end_span)
+            row.className = 'episode-row';
+            
+            const playBtn = document.createElement('button');[span_22](start_span)[span_22](end_span)
+            playBtn.className = 'episode-play-btn';
+            playBtn.innerText = `🎧 ${ep.title}`;[span_23](start_span)[span_23](end_span)
+            
+            playBtn.onclick = () => {
+                startPlayback(ep, finalImageUrl, channelName);
+            };
+
+            const dlBtn = document.createElement('button');[span_24](start_span)[span_24](end_span)
+            dlBtn.className = 'episode-dl-btn';
+            dlBtn.innerText = '⬇️';[span_25](start_span)[span_25](end_span)
+            
+            dlBtn.onclick = () => {
+                downloadEpisode(ep.url, ep.title, channelName);
+            };
+
+            row.appendChild(playBtn);[span_26](start_span)[span_26](end_span)
+            row.appendChild(dlBtn);[span_27](start_span)[span_27](end_span)
+            episodeList.appendChild(row);
+        });
+    }
+
+    // --- PLAYER & MEDIA LOGIC ---
+    function formatTime(seconds) {[span_28](start_span)[span_28](end_span)
+        seconds = Math.floor(seconds);
+        const sec = seconds % 60;
+        const min = Math.floor((seconds / 60)) % 60;
+        const hr = Math.floor(seconds / 3600);
+        const secStr = sec < 10 ? "0" + sec : sec;
+        const minStr = min < 10 ? "0" + min : min;
+        return hr > 0 ? `${hr}:${minStr}:${secStr}` : `${minStr}:${secStr}`;[span_29](start_span)[span_29](end_span)
+    }
+
+    function startPlayback(episode, imageUrl, channelName) {
+        displayVideo.pause();[span_30](start_span)[span_30](end_span)
+        
+        // Reset UI
+        descScroll.innerHTML = episode.desc;[span_31](start_span)[span_31](end_span)
+        descScroll.scrollTop = 0;
+        descScroll.style.display = 'none';[span_32](start_span)[span_32](end_span)
+        descToggle.innerText = "Read Description ▼";[span_33](start_span)[span_33](end_span)
+        
+        if (imageUrl) {
+            mediaCover.src = imageUrl;
+            mediaCover.style.display = 'block';[span_34](start_span)[span_34](end_span)
+            displayVideo.style.opacity = '0'; // Hide video element for pure audio
+        } else {
+            mediaCover.style.display = 'none';[span_35](start_span)[span_35](end_span)
+            displayVideo.style.opacity = '1';
+        }
+
+        timeCurrent.innerText = "00:00";[span_36](start_span)[span_36](end_span)
+        timeTotal.innerText = "00:00";[span_37](start_span)[span_37](end_span)
+        mediaSeek.value = 0;[span_38](start_span)[span_38](end_span)
+        
+        displayVideo.src = episode.url;[span_39](start_span)[span_39](end_span)
+        displayVideo.load();
+        displayVideo.play().catch(e => console.error("Playback failed", e));[span_40](start_span)[span_40](end_span)
+        
+        miniTitle.innerText = episode.title;
+        miniPlayer.classList.add('active');
+        miniPlayBtn.innerText = '⏸';
+
+        playerView.classList.add('active');
+    }
+
+    // Media Event Listeners
+    displayVideo.addEventListener('loadedmetadata', () => {
+        mediaSeek.max = displayVideo.duration;[span_41](start_span)[span_41](end_span)
+        timeTotal.innerText = formatTime(displayVideo.duration);[span_42](start_span)[span_42](end_span)
+    });
+
+    displayVideo.addEventListener('timeupdate', () => {
+        if (!mediaSeek.matches(':active')) {
+            mediaSeek.value = displayVideo.currentTime;[span_43](start_span)[span_43](end_span)
+        }
+        timeCurrent.innerText = formatTime(displayVideo.currentTime);[span_44](start_span)[span_44](end_span)
+    });
+
+    displayVideo.addEventListener('play', () => miniPlayBtn.innerText = '⏸');
+    displayVideo.addEventListener('pause', () => miniPlayBtn.innerText = '▶');
+
+    mediaSeek.addEventListener('input', () => {
+        displayVideo.currentTime = mediaSeek.value;[span_45](start_span)[span_45](end_span)
+        timeCurrent.innerText = formatTime(mediaSeek.value);[span_46](start_span)[span_46](end_span)
+    });
+
+    // Tap to skip logic (Left/Right zones)
+    function handleTap(isLeft) {
+        const now = Date.now();
+        if (now - lastTapTime < 300) {[span_47](start_span)[span_47](end_span)
+            // Double Tap
+            clearTimeout(singleTapTimeout);[span_48](start_span)[span_48](end_span)
+            const skipAmount = 15;[span_49](start_span)[span_49](end_span)
+            if (isLeft) {
+                displayVideo.currentTime = Math.max(0, displayVideo.currentTime - skipAmount);[span_50](start_span)[span_50](end_span)
+            } else {
+                displayVideo.currentTime = Math.min(displayVideo.duration, displayVideo.currentTime + skipAmount);[span_51](start_span)[span_51](end_span)
+            }
+            lastTapTime = 0;[span_52](start_span)[span_52](end_span)
+        } else {
+            // Single Tap
+            lastTapTime = now;[span_53](start_span)[span_53](end_span)
+            singleTapTimeout = setTimeout(() => {[span_54](start_span)[span_54](end_span)
+                if (displayVideo.paused) displayVideo.play();[span_55](start_span)[span_55](end_span)
+                else displayVideo.pause();[span_56](start_span)[span_56](end_span)
+            }, 300);[span_57](start_span)[span_57](end_span)
+        }
+    }
+    document.getElementById('tap-left-zone').addEventListener('touchstart', (e) => { e.preventDefault(); handleTap(true); });
+    document.getElementById('tap-right-zone').addEventListener('touchstart', (e) => { e.preventDefault(); handleTap(false); });
+    document.getElementById('tap-left-zone').addEventListener('mousedown', () => handleTap(true));
+    document.getElementById('tap-right-zone').addEventListener('mousedown', () => handleTap(false));
+
+    // Player Buttons
+    function toggleMute() {
+        isMuted = !isMuted;[span_58](start_span)[span_58](end_span)
+        displayVideo.muted = isMuted;[span_59](start_span)[span_59](end_span)
+        muteBtn.innerText = isMuted ? "🔇" : "🔊";[span_60](start_span)[span_60](end_span)
+    }
+
+    function toggleSleepTimer() {
+        if (sleepTimerMins === 0) sleepTimerMins = 15;[span_61](start_span)[span_61](end_span)
+        else if (sleepTimerMins === 15) sleepTimerMins = 30;[span_62](start_span)[span_62](end_span)
+        else if (sleepTimerMins === 30) sleepTimerMins = 60;[span_63](start_span)[span_63](end_span)
+        else sleepTimerMins = 0;[span_64](start_span)[span_64](end_span)
+
+        if (sleepInterval) clearInterval(sleepInterval);
+
+        if (sleepTimerMins === 0) {[span_65](start_span)[span_65](end_span)
+            sleepTargetTime = 0;[span_66](start_span)[span_66](end_span)
+            sleepStatus.innerText = "⌛Off";[span_67](start_span)[span_67](end_span)
+            sleepStatus.style.color = "var(--md-sys-color-on-surface)";[span_68](start_span)[span_68](end_span)
+        } else {
+            sleepTargetTime = Date.now() + (sleepTimerMins * 60000);[span_69](start_span)[span_69](end_span)
+            sleepStatus.innerText = `⌛${sleepTimerMins}m`;[span_70](start_span)[span_70](end_span)
+            sleepStatus.style.color = "var(--md-sys-color-primary)";[span_71](start_span)[span_71](end_span)
+            
+            sleepInterval = setInterval(() => {
+                if (Date.now() >= sleepTargetTime) {[span_72](start_span)[span_72](end_span)
+                    displayVideo.pause();[span_73](start_span)[span_73](end_span)
+                    clearInterval(sleepInterval);
+                    sleepTimerMins = 0;[span_74](start_span)[span_74](end_span)
+                    sleepStatus.innerText = "⌛Off";[span_75](start_span)[span_75](end_span)
+                    sleepStatus.style.color = "var(--md-sys-color-on-surface)";[span_76](start_span)[span_76](end_span)
+                    alert("Sleep Timer finished.");[span_77](start_span)[span_77](end_span)
+                }
+            }, 1000);
+        }
+    }
+
+    function toggleDescription() {
+        if (descScroll.style.display === 'none' || descScroll.style.display === '') {
+            descScroll.style.display = 'block';[span_78](start_span)[span_78](end_span)
+            descToggle.innerText = "Hide Description ▲";[span_79](start_span)[span_79](end_span)
+        } else {
+            descScroll.style.display = 'none';[span_80](start_span)[span_80](end_span)
+            descToggle.innerText = "Read Description ▼";[span_81](start_span)[span_81](end_span)
+        }
+    }
+
+    function shrinkPlayer() {
+        playerView.classList.remove('active');
+    }
+
+    function expandPlayer() {
+        playerView.classList.add('active');
+    }
+
+    function toggleMiniPlay(event) {
+        event.stopPropagation();
+        if (displayVideo.paused) displayVideo.play();
+        else displayVideo.pause();
+    }
+
+    function closePlayer() {
+        displayVideo.pause();[span_82](start_span)[span_82](end_span)
+        displayVideo.src = "";
+        playerView.classList.remove('active');
+        miniPlayer.classList.remove('active');
+    }
+
+    // --- DOWNLOAD MANAGER ---
+    function downloadEpisode(url, title, channelName) {
+        // Strip non-standard characters[span_83](start_span)[span_83](end_span)
+        const safeTitle = title.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();[span_84](start_span)[span_84](end_span)
+        const safeChannel = channelName.replace(/[^a-zA-Z0-9\.\- ']/g, "").trim();[span_85](start_span)[span_85](end_span)
+        const filename = `${safeChannel} - ${safeTitle}.mp3`;[span_86](start_span)[span_86](end_span)
+        
+        // Creating an anchor tag to trigger browser download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.target = '_blank'; // Fallback if browser forces a new tab for cross-origin media
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    // --- UTILS & MODALS ---
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+    function escapeHtml(text) { return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+    // --- BACKUP & SYNC ---
+    function exportData() {[span_87](start_span)[span_87](end_span)
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(channels));[span_88](start_span)[span_88](end_span)
+        const downloadNode = document.createElement('a');[span_89](start_span)[span_89](end_span)
+        downloadNode.setAttribute("href", dataStr);[span_90](start_span)[span_90](end_span)
+        downloadNode.setAttribute("download", "podcasts_backup.json");[span_91](start_span)[span_91](end_span)
+        document.body.appendChild(downloadNode);[span_92](start_span)[span_92](end_span)
+        downloadNode.click();[span_93](start_span)[span_93](end_span)
+        downloadNode.remove();[span_94](start_span)[span_94](end_span)
+    }
+
+    function importData(event) {[span_95](start_span)[span_95](end_span)
+        const file = event.target.files[0];[span_96](start_span)[span_96](end_span)
+        if (!file) return;[span_97](start_span)[span_97](end_span)
+        const reader = new FileReader();[span_98](start_span)[span_98](end_span)
+        reader.onload = function(e) {[span_99](start_span)[span_99](end_span)
+            try {
+                const imported = JSON.parse(e.target.result);[span_100](start_span)[span_100](end_span)
+                if(Array.isArray(imported)) {[span_101](start_span)[span_101](end_span)
+                    channels = imported;[span_102](start_span)[span_102](end_span)
+                    saveToStorage();[span_103](start_span)[span_103](end_span)
+                    renderChannels();[span_104](start_span)[span_104](end_span)
+                    closeModal('settings-modal');[span_105](start_span)[span_105](end_span)
+                    alert("Podcasts imported successfully!");[span_106](start_span)[span_106](end_span)
+                }
+            } catch (err) { alert("Invalid backup file."); }[span_107](start_span)[span_107](end_span)
+        };
+        reader.readAsText(file);[span_108](start_span)[span_108](end_span)
+        event.target.value = '';[span_109](start_span)[span_109](end_span)
+    }
+
+    // Boot
+    init();
+
+</script>
+</body>
+</html>
