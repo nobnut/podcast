@@ -101,9 +101,14 @@
             transition: transform 0.2s, background-color 0.2s;
             flex-shrink: 0;
             user-select: none;
+            -webkit-touch-callout: none; /* Prevents long-press browser popups */
         }
         .feed-btn:active { transform: scale(0.98); background-color: var(--md-sys-color-surface-container-highest); }
-        .feed-icon { font-size: 20px; pointer-events: none; }
+        .feed-icon { font-size: 20px; pointer-events: none; width: 40px; text-align: center; }
+        .feed-thumb { 
+            width: 40px; height: 40px; border-radius: 8px; object-fit: cover; 
+            flex-shrink: 0; background-color: var(--md-sys-color-surface-container-highest); pointer-events: none;
+        }
         .feed-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;}
         .feed-delete { 
             color: var(--md-sys-color-error); background: transparent; border: none; 
@@ -166,7 +171,7 @@
         }
 
         .media-container {
-            width: 100%; aspect-ratio: 1 / 1; max-height: 700px;
+            width: 100%; aspect-ratio: 1 / 1; max-height: 350px;
             background-color: #1C1B1F; border-radius: var(--radius-medium);
             margin: 0 auto; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center;
         }
@@ -274,6 +279,23 @@
     });
   }
 </script>
+<!-- Link to the manifest file -->
+<link rel="manifest" href="./manifest.json">
+
+<!-- Register the Service Worker -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(registration => {
+          console.log('Service Worker registered successfully');
+        })
+        .catch(error => {
+          console.log('Service Worker registration failed:', error);
+        });
+    });
+  }
+</script>
 
 </head>
 <body>
@@ -351,6 +373,22 @@
         </div>
     </div>
 
+    <!-- REORDER MODAL -->
+    <div id="reorder-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Reorder Podcast</div>
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                <button class="settings-btn" onclick="moveChannel('top')">⬆️ Move to Top</button>
+                <button class="settings-btn" onclick="moveChannel('up')">🔼 Move Up</button>
+                <button class="settings-btn" onclick="moveChannel('down')">🔽 Move Down</button>
+                <button class="settings-btn" onclick="moveChannel('bottom')">⬇️ Move to Bottom</button>
+            </div>
+            <div class="modal-actions">
+                <button class="text-btn" style="color: var(--md-sys-color-error);" onclick="closeModal('reorder-modal')">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SETTINGS MODAL -->
     <div id="settings-modal" class="modal">
         <div class="modal-content">
@@ -373,6 +411,7 @@
     // --- STATE MANAGEMENT ---
     let channels = JSON.parse(localStorage.getItem('m3e_podcast_channels')) || [];
     let currentFetchId = 0;
+    let selectedChannelIdForReorder = null;
     
     // Player State
     let isMuted = false;
@@ -430,16 +469,59 @@
         channels.forEach((channel) => {
             const btn = document.createElement('div');
             btn.className = 'feed-btn';
+            
+            // Prevent default context menus on mobile when long-pressing
+            btn.oncontextmenu = (e) => { e.preventDefault(); return false; };
+
+            const imageHtml = channel.imageUrl 
+                ? `<img src="${channel.imageUrl}" class="feed-thumb" alt="Cover">`
+                : `<span class="feed-icon">📻</span>`;
+
             btn.innerHTML = `
-                <span class="feed-icon">📻</span>
+                ${imageHtml}
                 <span class="feed-title">${escapeHtml(channel.title)}</span>
                 <button class="feed-delete" onclick="deleteChannel(${channel.id}, event)">✖</button>
             `;
+            
+            // Long Press Logic
+            let pressTimer;
+            let isLongPress = false;
+
+            const startPress = (e) => {
+                if (e.target.classList.contains('feed-delete')) return;
+                isLongPress = false;
+                pressTimer = setTimeout(() => {
+                    isLongPress = true;
+                    selectedChannelIdForReorder = channel.id;
+                    openModal('reorder-modal');
+                    // Add a tiny haptic buzz if supported by the device
+                    if(navigator.vibrate) navigator.vibrate(50);
+                }, 600); // 600ms = long press
+            };
+
+            const cancelPress = () => {
+                clearTimeout(pressTimer);
+            };
+
+            // Touch events for mobile
+            btn.addEventListener('touchstart', startPress, {passive: true});
+            btn.addEventListener('touchend', cancelPress);
+            btn.addEventListener('touchmove', cancelPress);
+            
+            // Mouse events for desktop
+            btn.addEventListener('mousedown', startPress);
+            btn.addEventListener('mouseup', cancelPress);
+            btn.addEventListener('mouseleave', cancelPress);
+
             btn.onclick = (e) => {
+                // If the user just held down for a long press, ignore the click
+                if(isLongPress) return; 
+                
                 if(!e.target.classList.contains('feed-delete')) {
                     fetchEpisodes(channel.url, channel.title);
                 }
             };
+            
             channelList.appendChild(btn);
         });
     }
@@ -465,6 +547,33 @@
             saveToStorage();
             renderChannels();
         }
+    }
+
+    // --- REORDER LOGIC ---
+    function moveChannel(direction) {
+        if (!selectedChannelIdForReorder) return;
+        const index = channels.findIndex(c => c.id === selectedChannelIdForReorder);
+        if (index === -1) return;
+
+        // Remove the item from the array
+        const channelToMove = channels.splice(index, 1)[0];
+
+        // Insert it back at the new position
+        if (direction === 'top') {
+            channels.unshift(channelToMove);
+        } else if (direction === 'bottom') {
+            channels.push(channelToMove);
+        } else if (direction === 'up') {
+            const newIndex = Math.max(0, index - 1);
+            channels.splice(newIndex, 0, channelToMove);
+        } else if (direction === 'down') {
+            const newIndex = Math.min(channels.length, index + 1);
+            channels.splice(newIndex, 0, channelToMove);
+        }
+
+        saveToStorage();
+        renderChannels();
+        closeModal('reorder-modal');
     }
 
     // --- XML PARSING AND ITUNES RESOLUTION ---
@@ -518,6 +627,16 @@
             const imageTag = xmlDoc.querySelector("channel > image > url, channel > itunes\\:image, itunes\\:image");
             if (imageTag) {
                 channelImageUrl = imageTag.textContent || imageTag.getAttribute("href") || "";
+            }
+
+            // Save the newly discovered Artwork to the Channel storage
+            if (channelImageUrl) {
+                const chIndex = channels.findIndex(c => c.title === channelName);
+                if (chIndex !== -1 && channels[chIndex].imageUrl !== channelImageUrl) {
+                    channels[chIndex].imageUrl = channelImageUrl;
+                    saveToStorage();
+                    renderChannels(); // Silently updates the list in the background
+                }
             }
 
             const items = xmlDoc.querySelectorAll("item, entry");
