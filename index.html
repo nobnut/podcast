@@ -581,16 +581,29 @@
         if (targetUrl.includes("podcasts.apple.com")) {
             const idMatch = targetUrl.match(/\/id(\d+)/);
             if (idMatch) {
+                const apiObj = `https://itunes.apple.com/lookup?id=${idMatch[1]}`;
                 try {
-                    const apiObj = `https://itunes.apple.com/lookup?id=${idMatch[1]}`;
-                    const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';
-                    const res = await fetch(`${proxyUrl}/?url=${encodeURIComponent(apiObj)}`);
+                    // Try direct fetch first - iTunes API officially supports CORS
+                    const res = await fetch(apiObj);
                     const data = await res.json();
                     
                     if (data.results && data.results.length > 0) {
                         return data.results[0].feedUrl;
                     }
-                } catch(e) { console.error("iTunes lookup failed", e); }
+                } catch(e) { 
+                    console.log("Direct iTunes lookup failed, falling back to proxy...", e);
+                    try {
+                        const proxyUrl = 'https://rss-proxy.slaterjohn2.workers.dev';
+                        const res = await fetch(`${proxyUrl}/?url=${encodeURIComponent(apiObj)}`);
+                        const data = await res.json();
+
+                        if (data.results && data.results.length > 0) {
+                            return data.results[0].feedUrl;
+                        }
+                    } catch (proxyErr) {
+                        console.error("Proxy iTunes lookup failed", proxyErr);
+                    }
+                }
             }
         }
         return targetUrl;
@@ -613,14 +626,17 @@
             if (!res.ok) throw new Error("Network response was not ok");
             const xmlText = await res.text();
             
-            if (xmlText.trim().toLowerCase().startsWith("<!doctype html>") || xmlText.includes("<html")) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            
+            // Smarter check: Instead of rejecting if the text merely contains HTML (which show notes often do),
+            // we check if the entire document's root node is purely an HTML web page.
+            const rootNode = xmlDoc.documentElement.nodeName.toLowerCase();
+            if (rootNode === "html" || xmlText.trim().toLowerCase().startsWith("<!doctype html>")) {
                 episodeList.innerHTML = `<div class="loading-text" style="color: var(--md-sys-color-error);">This is a website link, not an RSS feed. Please provide a valid RSS or Apple Podcasts URL.</div>`;
                 return;
             }
 
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-            
             if (fetchId !== currentFetchId) return;
 
             let channelImageUrl = "";
